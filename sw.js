@@ -1,5 +1,5 @@
 // Lift Log offline cache. Bump VERSION whenever the app files change.
-const VERSION = "lift-log-v4";
+const VERSION = "lift-log-v5";
 const CORE = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {

@@ -26,6 +26,7 @@
   --bg:#0F141A; --card:#18202A; --ink:#E7ECF1; --muted:#93A1AF; --line:#2A3440;
   --accent:#6A93F0; --accent-ink:#0B1220; --good:#4CC384; --warn:#E3A23B; --field:#111821; color-scheme:dark}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html{padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
@@ -85,6 +86,19 @@ h1{font-family:var(--display);font-weight:800;font-size:40px;line-height:1;margi
 .del.confirm{color:var(--warn);font-weight:700}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;font-size:14px;z-index:20}
 .backup{margin-bottom:10px}
+.cal{margin-bottom:10px}
+.cal-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cal-head h3{margin:0;font-family:var(--display);font-size:26px;text-transform:uppercase;line-height:1}
+.cal-nav{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--field);color:var(--ink);font:700 18px var(--mono);cursor:pointer}
+.cal-nav:disabled{opacity:.35;cursor:default}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.calgrid .dow{font:600 11px var(--body);color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.06em;padding-bottom:2px}
+.calgrid .d{aspect-ratio:1;max-width:100%;border-radius:8px;display:grid;place-items:center;align-content:center;gap:0;font:600 14px var(--mono);font-variant-numeric:tabular-nums;color:var(--muted);background:var(--field);border:1px solid transparent}
+.calgrid .d small{font:700 9px var(--body);text-transform:uppercase;letter-spacing:.04em;line-height:1}
+.calgrid .d.on{background:var(--accent);color:var(--accent-ink);cursor:pointer}
+.calgrid .d.today{border-color:var(--ink)}
+.calgrid .d.blank{background:none}
+.cal-sum{font-size:13px;color:var(--muted)}
 .skip{margin-bottom:10px;border-style:dashed}
 .skip .btn{justify-self:start}
 label.btn{display:inline-flex;align-items:center;justify-content:center}
@@ -120,6 +134,7 @@ label.btn{display:inline-flex;align-items:center;justify-content:center}
   </main>
 
   <main id="histView" hidden>
+    <section class="card cal" id="cal"></section>
     <section class="card backup">
       <p class="ex-name">Backup</p>
       <p class="note" id="backupNote">Your log lives on this phone. Export a backup now and then so you never lose it.</p>
@@ -359,7 +374,30 @@ $("finish").onclick = async ()=>{
   toast("Saved. Next up: Day "+(draft.day+1)+" · "+DAYS[draft.day].name);
 };
 
+let calY = new Date().getFullYear(), calM = new Date().getMonth();
+function renderCal(){
+  const byDate = {}; sessions.forEach(s=>{ (byDate[s.date] = byDate[s.date] || []).push(s); });
+  const now = new Date(), isNow = calY===now.getFullYear() && calM===now.getMonth();
+  const first = new Date(calY, calM, 1), days = new Date(calY, calM+1, 0).getDate(), lead = first.getDay();
+  const pad = n => String(n).padStart(2,"0"), key = d => calY+"-"+pad(calM+1)+"-"+pad(d);
+  let count = 0, cells = "";
+  for(let i=0;i<lead;i++) cells += `<div class="d blank"></div>`;
+  for(let d=1; d<=days; d++){
+    const ss = byDate[key(d)], today = isNow && d===now.getDate();
+    if(ss){ count++; cells += `<button class="d on${today?" today":""}" data-id="${ss[0].id}" aria-label="${first.toLocaleDateString(undefined,{month:"long"})} ${d}, ${ss.map(x=>DAYS[x.day].name).join(" and ")}">${d}<small>${ss.map(x=>DAYS[x.day].name).join("+")}</small></button>`; }
+    else cells += `<div class="d${today?" today":""}">${d}</div>`;
+  }
+  $("cal").innerHTML = `<div class="cal-head"><button class="cal-nav" id="calPrev" aria-label="Previous month">‹</button>
+    <h3>${first.toLocaleDateString(undefined,{month:"long",year:"numeric"})}</h3>
+    <button class="cal-nav" id="calNext" aria-label="Next month" ${isNow?"disabled":""}>›</button></div>
+    <div class="calgrid">${["S","M","T","W","T","F","S"].map(x=>`<div class="dow">${x}</div>`).join("")}${cells}</div>
+    <div class="cal-sum">${count} workout${count===1?"":"s"} ${isNow?"so far this month":"this month"}</div>`;
+  $("calPrev").onclick = ()=>{ calM--; if(calM<0){calM=11;calY--;} renderCal(); };
+  $("calNext").onclick = ()=>{ if(isNow) return; calM++; if(calM>11){calM=0;calY++;} renderCal(); };
+  $("cal").querySelectorAll(".d.on").forEach(b=>b.onclick=()=>{ const el=document.getElementById("s-"+b.dataset.id); if(el) el.scrollIntoView({behavior:"smooth",block:"center"}); });
+}
 function renderHist(){
+  renderCal();
   const h=$("hist");
   if(!sessions.length){ h.innerHTML=`<div class="empty">No workouts logged yet. Finish one and it shows up here.</div>`; return; }
   // Retired exercises stay readable in history
@@ -373,7 +411,7 @@ function renderHist(){
       return `<tr><td>${x.name}</td><td>${w}${e.reps.join(", ")}${x.unit==="sec"?"s":""}</td></tr>`;
     }).join("");
     const dt=new Date(s.date+"T12:00").toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
-    return `<section class="card"><div class="row between"><h3>Day ${s.day+1} · ${DAYS[s.day].name}</h3><span class="date">${dt}</span></div>
+    return `<section class="card" id="s-${s.id}"><div class="row between"><h3>Day ${s.day+1} · ${DAYS[s.day].name}</h3><span class="date">${dt}</span></div>
       <table>${rows}</table>
       <div><button class="del ${confirmDel===s.id?"confirm":""}" data-id="${s.id}">${confirmDel===s.id?"Tap again to delete":"Delete"}</button></div></section>`;
   }).join("");
