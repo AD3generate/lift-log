@@ -85,6 +85,8 @@ h1{font-family:var(--display);font-weight:800;font-size:40px;line-height:1;margi
 .del.confirm{color:var(--warn);font-weight:700}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;font-size:14px;z-index:20}
 .backup{margin-bottom:10px}
+.skip{margin-bottom:10px;border-style:dashed}
+.skip .btn{justify-self:start}
 label.btn{display:inline-flex;align-items:center;justify-content:center}
 .empty{text-align:center;color:var(--muted);padding:30px 10px}
 @media (prefers-reduced-motion:no-preference){.card{transition:border-color .2s}}
@@ -107,6 +109,11 @@ label.btn{display:inline-flex;align-items:center;justify-content:center}
   </header>
 
   <main id="logView">
+    <section class="card skip" id="skipBox" hidden>
+      <p class="ex-name">Can't get to the gym?</p>
+      <p class="note">Skip legs and do <span id="skipTo">Day 1</span> instead. Your upper body order stays the same, and legs come back after your next Day 4.</p>
+      <button class="btn ghost" id="skipBtn">Skip legs today</button>
+    </section>
     <p class="rule">Hit the top of the range on every set → the app bumps the weight next time. Miss it → same weight again.</p>
     <div class="list" id="list"></div>
     <p class="note" id="storeNote"></p>
@@ -193,7 +200,11 @@ let store = null;                              // {col} when db is available
 let draft = LS.get("lift.draft", null);
 let confirmDel = null;
 
-function nextDay(){ return sessions.length ? (sessions[0].day + 1) % 5 : 0; }
+// Upper body days (1-4) keep their own order; legs never shift it.
+function upperNext(){ const u = sessions.find(s=>s.day<4); return u ? (u.day+1)%4 : 0; }
+function legsDue(){ const i = sessions.findIndex(s=>s.day<4); if(i<0 || sessions[i].day!==3) return false;
+  return !sessions.slice(0,i).some(s=>s.day===4); }
+function nextDay(){ return legsDue() ? 4 : upperNext(); }
 function sortSessions(){ sessions.sort((a,b)=> (b.ts||0)-(a.ts||0)); }
 
 function newDraft(){ return {id:"s"+Date.now().toString(36)+Math.random().toString(36).slice(2,6), date:todayStr(), day:nextDay(), byDay:{}}; }
@@ -265,6 +276,8 @@ function render(){
   renderDays();
   const list = $("list"); list.innerHTML="";
   if(!d.noHS) list.appendChild(handstandCard());
+  $("skipBox").hidden = draft.day!==4;
+  $("skipTo").textContent = "Day "+(upperNext()+1)+" · "+DAYS[upperNext()].name;
   d.ex.forEach(ex=>list.appendChild(exCard(ex)));
   updateProgress();
 }
@@ -333,6 +346,7 @@ function updateProgress(){
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2200); }
 
 let finishArmed=false;
+$("skipBtn").onclick = ()=>{ draft.day = upperNext(); saveDraft(); render(); window.scrollTo({top:0}); toast("Legs skipped. Day "+(draft.day+1)+" it is."); };
 $("finish").onclick = async ()=>{
   const built = sessionFrom(draft), any = !!built;
   if(!any && !finishArmed){ finishArmed=true; $("finish").textContent="Nothing logged. Tap again to skip"; setTimeout(()=>{finishArmed=false;$("finish").textContent="Finish workout"},3000); return; }
