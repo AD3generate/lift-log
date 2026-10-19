@@ -169,8 +169,8 @@ const DAYS = [
     X("dragon","Dragon flag negatives",3,5,5,"bw",{tip:"All 5 clean: lower slower, then try full reps."}),
     X("sarow","Single-arm DB row",4,8,12,"db",{side:true}),
     X("pullup","Pull-ups",3,5,8,"bw",{tip:"Top of range: add weight in a backpack."}),
-    X("bentrow","Bent over DB row",3,8,12,"db"),
-    X("reardelt","Rear delt fly (or face pulls)",3,12,15,"db"),
+    X("chinup","Chin-ups",3,6,10,"bw",{tip:"Top of range: add weight in a backpack."}),
+    X("dbcurl","DB curls",3,8,12,"db"),
   ]},
   {name:"Legs", ex:[
     X("squat","Barbell squat, heels raised",3,6,10,"bar",{tip:"Ramp up 2–3 sets first. They don't count."}),
@@ -319,7 +319,9 @@ $("finish").onclick = async ()=>{
 function renderHist(){
   const h=$("hist");
   if(!sessions.length){ h.innerHTML=`<div class="empty">No workouts logged yet. Finish one and it shows up here.</div>`; return; }
-  const names={}; DAYS.forEach(d=>d.ex.forEach(x=>names[x.id]=x));
+  // Retired exercises stay readable in history
+  const names={bentrow:{name:"Bent over DB row",kind:"db"},reardelt:{name:"Rear delt fly",kind:"db"}};
+  DAYS.forEach(d=>d.ex.forEach(x=>names[x.id]=x));
   h.innerHTML = sessions.slice(0,60).map(s=>{
     const rows = Object.entries(s.entries||{}).map(([k,e])=>{
       if(k==="handstand") return `<tr><td>Handstand</td><td>stage ${e.stage}${e.done?" ✓":""}</td></tr>`;
