@@ -145,7 +145,7 @@ const HS_STAGES = [
 const X = (id,name,sets,lo,hi,kind,opt={}) => ({id,name,sets,lo,hi,kind,unit:opt.unit||"reps",side:!!opt.side,tip:opt.tip||""});
 const DAYS = [
   {name:"Push", ex:[
-    X("plank","Plank",3,45,60,"bw",{unit:"sec",tip:"Past 60s: move elbows forward two inches."}),
+    X("plank","Plank",3,45,45,"bw",{unit:"sec"}),
     X("pike","Pike push-ups (feet elevated)",3,5,10,"bw",{tip:"Top of range: raise your feet higher."}),
     X("dips","Dips",3,6,10,"bw",{tip:"Top of range: add weight in a backpack."}),
     X("dbbench","DB bench press",3,8,12,"db"),
@@ -159,7 +159,7 @@ const DAYS = [
     X("hammer","Hammer curls",3,8,12,"db"),
   ]},
   {name:"Push", ex:[
-    X("plank","Plank",3,45,60,"bw",{unit:"sec",tip:"Past 60s: move elbows forward two inches."}),
+    X("plank","Plank",3,45,45,"bw",{unit:"sec"}),
     X("dips","Dips",3,6,10,"bw",{tip:"Top of range: add weight in a backpack."}),
     X("ohp","DB overhead press, standing",3,8,12,"db"),
     X("pike","Pike push-ups",3,6,10,"bw",{tip:"Top of range: raise your feet higher."}),
@@ -172,7 +172,7 @@ const DAYS = [
     X("chinup","Chin-ups",3,6,10,"bw",{tip:"Top of range: add weight in a backpack."}),
     X("dbcurl","DB curls",3,8,12,"db"),
   ]},
-  {name:"Legs", ex:[
+  {name:"Legs", noHS:true, ex:[
     X("squat","Barbell squat, heels raised",3,6,10,"bar",{tip:"Ramp up 2–3 sets first. They don't count."}),
     X("legcurl","Seated leg curl",3,10,12,"mach"),
     X("legpress","Leg press, feet low and narrow",3,10,12,"mach"),
@@ -196,8 +196,24 @@ let confirmDel = null;
 function nextDay(){ return sessions.length ? (sessions[0].day + 1) % 5 : 0; }
 function sortSessions(){ sessions.sort((a,b)=> (b.ts||0)-(a.ts||0)); }
 
+function newDraft(){ return {id:"s"+Date.now().toString(36)+Math.random().toString(36).slice(2,6), date:todayStr(), day:nextDay(), byDay:{}}; }
 function ensureDraft(){
-  if(!draft || draft.finished){ draft = {id:"s"+Date.now().toString(36)+Math.random().toString(36).slice(2,6), date:todayStr(), day:nextDay(), entries:{}}; saveDraft(); }
+  if(draft && !draft.byDay){ draft.byDay = {}; draft.byDay[draft.day] = draft.entries||{}; delete draft.entries; }
+  if(draft && draft.date!==todayStr()){
+    // Workout left open from an earlier day: keep it if anything was logged, then start fresh
+    const sess = sessionFrom(draft);
+    if(sess){ sessions = sessions.filter(x=>x.id!==sess.id); sessions.push(sess); sortSessions(); LS.set("lift.sessions",sessions); }
+    draft = null;
+  }
+  if(!draft){ draft = newDraft(); saveDraft(); }
+}
+function E(){ return draft.byDay[draft.day] || (draft.byDay[draft.day] = {}); }
+function sessionFrom(dr){
+  const d=DAYS[dr.day], src=(dr.byDay&&dr.byDay[dr.day])||{}, entries={}; let any=false;
+  if(!d.noHS && src.handstand) entries.handstand=src.handstand;
+  d.ex.forEach(ex=>{ const e=src[ex.id]; if(e&&e.reps&&e.reps.some(r=>r!=null)){
+    entries[ex.id]={w:e.w||0,reps:e.reps.map(r=>r==null?0:r)}; if(ex.unit==="sec") entries[ex.id].t=e.t; any=true; } });
+  return any ? {id:dr.id,date:dr.date,day:dr.day,ts:new Date(dr.date+"T20:00").getTime(),entries} : null;
 }
 function saveDraft(){ LS.set("lift.draft", draft); }
 
@@ -207,8 +223,15 @@ function lastFor(exId, nBack=1){
 }
 function lastStage(){ for(const s of sessions){ const h=s.entries&&s.entries.handstand; if(h&&h.stage) return h.stage; } return 1; }
 
+function holdTarget(ex){ const [last]=lastFor(ex.id,1); return last ? (last.t||ex.hi) : ex.lo; }
 function advice(ex){
   const [last] = lastFor(ex.id,1);
+  if(ex.unit==="sec"){
+    if(!last) return {t:ex.lo, cls:"same", text:"First time. Hold "+ex.lo+"s on each set."};
+    const t=holdTarget(ex), hit=last.reps.length>=ex.sets && last.reps.slice(0,ex.sets).every(r=>r>=t);
+    if(hit) return {t:t+5, cls:"up", text:"Held "+t+"s on every set. New target: "+(t+5)+"s."};
+    return {t, cls:"same", text:"Same target. Hold "+t+"s on every set to move up."};
+  }
   if(!last) return {w: ex.kind==="bw"?0:(ex.kind==="db"?15:ex.kind==="bar"?45:40), cls:"same", text:"First time. Pick a weight you could do for the middle of the range."};
   const hit = last.reps.length>=ex.sets && last.reps.slice(0,ex.sets).every(r=>r>=ex.hi);
   let w = last.w||0;
@@ -241,13 +264,13 @@ function render(){
   $("dateLbl").textContent = new Date(draft.date+"T12:00").toLocaleDateString(undefined,{weekday:"long",month:"short",day:"numeric"});
   renderDays();
   const list = $("list"); list.innerHTML="";
-  list.appendChild(handstandCard());
+  if(!d.noHS) list.appendChild(handstandCard());
   d.ex.forEach(ex=>list.appendChild(exCard(ex)));
   updateProgress();
 }
 
 function handstandCard(){
-  const e = draft.entries.handstand || (draft.entries.handstand = {stage:lastStage(), done:false});
+  const e = E().handstand || (E().handstand = {stage:lastStage(), done:false});
   const c = document.createElement("section"); c.className="card"+(e.done?" done":"");
   c.innerHTML = `<div><p class="ex-name">Handstand block</p><div class="target">~12 min · your stage</div></div>
     <div class="stages">${HS_STAGES.map((_,i)=>`<button data-s="${i+1}" aria-pressed="${e.stage===i+1}" aria-label="Stage ${i+1}">${i+1}</button>`).join("")}</div>
@@ -263,28 +286,38 @@ function handstandCard(){
 function exCard(ex){
   const adv = advice(ex);
   const [last] = lastFor(ex.id,1);
-  let e = draft.entries[ex.id];
-  if(!e || !Array.isArray(e.reps) || e.reps.length!==ex.sets){ e = draft.entries[ex.id] = {w:adv.w, reps:Array(ex.sets).fill(null)}; }
+  const timed = ex.unit==="sec";
+  let e = E()[ex.id];
+  if(!e || !Array.isArray(e.reps) || e.reps.length!==ex.sets){ e = E()[ex.id] = {w:adv.w||0, t:adv.t, reps:Array(ex.sets).fill(null)}; }
+  if(timed && !e.t) e.t = adv.t;
+  const goal = ()=> timed ? e.t : ex.hi;
   const c = document.createElement("section"); c.className="card";
   const u = ex.unit==="sec"?"s":"";
   const lastTxt = last ? `Last: <b>${ex.kind==="bw"&&!last.w? "BW" : fmtW(last.w)+" lb"} × ${last.reps.map(r=>r==null?"–":r+u).join(", ")}</b>` : "No history yet";
   const wLabel = ex.kind==="db"?"lb / hand":ex.kind==="bw"?"added lb":"lb";
-  c.innerHTML = `<div><p class="ex-name">${ex.name}</p><div class="target">${ex.sets} × ${ex.lo===ex.hi?ex.lo:ex.lo+"–"+ex.hi}${ex.unit==="sec"?"s":""}${ex.side?" /side":""}</div></div>
+  c.innerHTML = `<div><p class="ex-name">${ex.name}</p><div class="target">${timed? ex.sets+" × target time" : ex.sets+" × "+(ex.lo===ex.hi?ex.lo:ex.lo+"–"+ex.hi)}${ex.side?" /side":""}</div></div>
     <div class="last">${lastTxt}</div>
     <div class="tip ${adv.cls}">${adv.text}</div>
-    ${ex.unit==="sec"?"":`<div class="weight"><span class="lbl">${wLabel}</span>
+    ${timed?`<div class="weight"><span class="lbl">target</span>
+      <button class="step" data-t="-1" aria-label="Shorter target">−</button>
+      <span class="wval tval">${e.t}s</span>
+      <button class="step" data-t="1" aria-label="Longer target">+</button></div>`:`<div class="weight"><span class="lbl">${wLabel}</span>
       <button class="step" data-d="-1" aria-label="Less weight">−</button>
       <span class="wval">${ex.kind==="bw"&&!e.w?"BW":fmtW(e.w)}</span>
       <button class="step" data-d="1" aria-label="More weight">+</button></div>`}
-    <div class="sets" style="--n:${ex.sets}">${e.reps.map((r,i)=>`<label>Set ${i+1}<input id="${draft.day}-${ex.id}-${i}" type="number" inputmode="numeric" min="0" max="300" placeholder="${last&&last.reps[i]!=null?last.reps[i]:ex.hi}" value="${r==null?"":r}"></label>`).join("")}</div>`;
+    <div class="sets" style="--n:${ex.sets}">${e.reps.map((r,i)=>`<label>Set ${i+1}<input id="${draft.day}-${ex.id}-${i}" type="number" inputmode="numeric" min="0" max="300" placeholder="${timed? e.t : (last&&last.reps[i]!=null?last.reps[i]:ex.hi)}" value="${r==null?"":r}"></label>`).join("")}</div>`;
   const wv = c.querySelector(".wval");
-  c.querySelectorAll(".step").forEach(b=>b.onclick=()=>{
+  c.querySelectorAll(".step[data-t]").forEach(b=>b.onclick=()=>{
+    e.t = Math.max(10, e.t + (+b.dataset.t)*5); wv.textContent = e.t+"s"; saveDraft();
+    inputs.forEach(inp=>inp.placeholder=e.t); mark();
+  });
+  c.querySelectorAll(".step[data-d]").forEach(b=>b.onclick=()=>{
     const s = STEP[ex.kind]; e.w = Math.max(0, Math.round((e.w + (+b.dataset.d)*s)*10)/10);
     if(ex.kind==="db") e.w=Math.min(DB_MAX,e.w);
     wv.textContent = ex.kind==="bw"&&!e.w?"BW":fmtW(e.w); saveDraft();
   });
   const inputs = c.querySelectorAll(".sets input");
-  const mark = ()=>{ inputs.forEach((inp,i)=>inp.classList.toggle("hit", e.reps[i]!=null && e.reps[i]>=ex.hi));
+  const mark = ()=>{ inputs.forEach((inp,i)=>inp.classList.toggle("hit", e.reps[i]!=null && e.reps[i]>=goal()));
     c.classList.toggle("done", e.reps.every(r=>r!=null)); updateProgress(); };
   inputs.forEach((inp,i)=>inp.oninput=()=>{ const v=inp.value===""?null:Math.max(0,parseInt(inp.value,10)||0); e.reps[i]=v; saveDraft(); mark(); });
   mark();
@@ -292,23 +325,19 @@ function exCard(ex){
 }
 
 function updateProgress(){
-  const d=DAYS[draft.day]; let done = draft.entries.handstand&&draft.entries.handstand.done?1:0;
-  d.ex.forEach(ex=>{ const e=draft.entries[ex.id]; if(e&&e.reps&&e.reps.every(r=>r!=null)) done++; });
-  $("progress").textContent = done+"/"+(d.ex.length+1);
+  const d=DAYS[draft.day], en=E(); let done = !d.noHS && en.handstand && en.handstand.done ? 1 : 0;
+  d.ex.forEach(ex=>{ const e=en[ex.id]; if(e&&e.reps&&e.reps.every(r=>r!=null)) done++; });
+  $("progress").textContent = done+"/"+(d.ex.length+(d.noHS?0:1));
 }
 
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2200); }
 
 let finishArmed=false;
 $("finish").onclick = async ()=>{
-  const d=DAYS[draft.day];
-  const entries={};
-  if(draft.entries.handstand) entries.handstand=draft.entries.handstand;
-  let any=false;
-  d.ex.forEach(ex=>{ const e=draft.entries[ex.id]; if(e&&e.reps.some(r=>r!=null)){ entries[ex.id]={w:e.w||0,reps:e.reps.map(r=>r==null?0:r)}; any=true; } });
+  const built = sessionFrom(draft), any = !!built;
   if(!any && !finishArmed){ finishArmed=true; $("finish").textContent="Nothing logged. Tap again to skip"; setTimeout(()=>{finishArmed=false;$("finish").textContent="Finish workout"},3000); return; }
   finishArmed=false;
-  const sess={id:draft.id,date:draft.date,day:draft.day,ts:Date.now(),entries};
+  const sess = built || {id:draft.id,date:draft.date,day:draft.day,entries:{}}; sess.ts = Date.now();
   sessions = sessions.filter(s=>s.id!==sess.id); sessions.unshift(sess); sortSessions(); LS.set("lift.sessions",sessions);
   if(store){ try{ await store.col.doc(sess.id).set(sess); }catch(err){ toast("Saved on this phone. Sync failed, will retry next save."); } }
   draft=null; LS.del("lift.draft"); ensureDraft(); render();
