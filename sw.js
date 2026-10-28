@@ -1,6 +1,6 @@
 // Lift Log offline cache. Bump VERSION whenever the app files change.
 const PREFIX = "lift-log-";
-const VERSION = PREFIX + "v7";
+const VERSION = PREFIX + "v8";
 const KRISH = new URL("./krish/", self.location).pathname;
 const CORE = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 

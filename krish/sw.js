@@ -1,6 +1,6 @@
 // Krish's offline cache. Only touches caches and pages under its own folder.
 const PREFIX = "krish-lift-";
-const VERSION = PREFIX + "v2";
+const VERSION = PREFIX + "v3";
 const CORE = ["./", "./index.html", "./manifest.webmanifest", "./icon-180.png", "./icon-192.png", "./icon-512.png"];
 const SCOPE = new URL("./", self.location).pathname;
 

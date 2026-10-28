@@ -193,8 +193,9 @@ const DAYS = [
     X("calf","Standing calf raise",3,12,15,"mach"),
   ]},
 ];
-const STEP = {db:2.5, bar:5, mach:5, bw:5};
-const DB_MAX = 52.5;
+// Gym dumbbells jump 5 lb at a time
+const STEP = {db:5, bar:5, mach:5, bw:5};
+const DB_MAX = 150;
 
 const $ = id => document.getElementById(id);
 const todayStr = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
@@ -229,12 +230,12 @@ function sessionFrom(dr){
   if(!d.noHS && src.handstand) entries.handstand=src.handstand;
   d.ex.forEach(ex=>{ const e=src[ex.id]; if(e&&e.reps&&e.reps.some(r=>r!=null)){
     entries[ex.id]={w:e.w||0,reps:e.reps.map(r=>r==null?0:r)}; if(ex.unit==="sec") entries[ex.id].t=e.t; any=true; } });
-  return any ? {id:dr.id,date:dr.date,day:dr.day,ts:new Date(dr.date+"T20:00").getTime(),entries} : null;
+  return any ? {id:dr.id,date:dr.date,day:dr.day,ts:new Date(dr.date+"T20:00").getTime(),entries,easy:easyWeek(dr.date)||undefined} : null;
 }
 function saveDraft(){ LS.set("krish.draft", draft); }
 
 function lastFor(exId, nBack=1){
-  const out=[]; for(const s of sessions){ const e=s.entries&&s.entries[exId]; if(e && e.reps && e.reps.some(r=>r>0)){ out.push(e); if(out.length>=nBack) break; } }
+  const out=[]; for(const s of sessions){ if(s.easy) continue; const e=s.entries&&s.entries[exId]; if(e && e.reps && e.reps.some(r=>r>0)){ out.push(e); if(out.length>=nBack) break; } }
   return out;
 }
 function lastStage(){ for(const s of sessions){ const h=s.entries&&s.entries.handstand; if(h&&h.stage) return Math.min(h.stage, HS_STAGES.length); } return 1; }
@@ -248,6 +249,7 @@ function advice(ex){
     if(hit) return {t:t+ex.tstep, cls:"up", text:"Held "+t+"s on every set. New target: "+(t+ex.tstep)+"s."};
     return {t, cls:"same", text:"Same target. Hold "+t+"s on every set to move up."};
   }
+  if(last && easyWeek()) return {w:last.w||0, t:last.t, cls:"same", text:"Easy week. Same weight as last time, 2 sets, stop 3 reps short. This one doesn't count toward progress."};
   if(!last && ex.load && ex.lo<=6) return {w:0, cls:"same", text:"First time. Add backpack weight you could do about 6 reps with."};
   if(!last && ex.kind==="bar" && ex.lo===5) return {w:45, cls:"same", text:"First time. Use a weight you could lift 8 to 10 times, then do sets of 5. It climbs fast from here."};
   if(!last) return {w: ex.kind==="bw"?0:(ex.kind==="db"?15:ex.kind==="bar"?45:40), cls:"same", text:"First time. Pick a weight you could do for the middle of the range."};
@@ -279,10 +281,10 @@ function renderDays(){
 }
 
 const RULE_TEXT = "Hit the top of the range on every set (all 5s on the 5×5) → the app adds weight next time. Miss it → same weight again.";
-function easyWeek(){
+function easyWeek(onDate){
   if(!sessions.length) return false;
   const first = sessions.reduce((a,s)=> s.date<a ? s.date : a, sessions[0].date);
-  const wk = Math.floor((new Date(todayStr()+"T12:00") - new Date(first+"T12:00")) / (7*864e5));
+  const wk = Math.floor((new Date((onDate||todayStr())+"T12:00") - new Date(first+"T12:00")) / (7*864e5));
   return wk>0 && (wk+1)%7===0;
 }
 function render(){
