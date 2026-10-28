@@ -169,28 +169,28 @@ const HS_STAGES = [
 // kind: db = dumbbell (+2.5/hand), bar = barbell (+5), mach = machine (+5), bw = bodyweight (add reps, then backpack/variation)
 // load: true = weight goes in a backpack or dip belt. tstep = seconds added to a hold when the target is hit.
 const X = (id,name,sets,lo,hi,kind,opt={}) => ({id,name,sets,lo,hi,kind,unit:opt.unit||"reps",side:!!opt.side,tip:opt.tip||"",load:!!opt.load,tstep:opt.tstep||5});
-const WARM = "Warm up with the empty bar and 2 lighter sets first. Rest 3 to 5 min between work sets.";
+const WARM = "Warm up with the empty bar and 2 lighter sets first. Rest 3 to 5 min between work sets. Stop each set about 2 reps short until the weight gets hard.";
 const DAYS = [
   {name:"Push", title:"Push day", sub:"Bench", noHS:true, ex:[
     X("bench","Bench press",5,5,5,"bar",{tip:WARM}),
-    X("ohp","Overhead press",3,6,8,"bar"),
+    X("ohp","Overhead press",3,5,5,"bar"),
     X("incline","Incline DB press",3,8,12,"db"),
-    X("lateral","DB lateral raise",3,12,15,"db"),
-    X("pushdown","Triceps pushdown",3,10,12,"mach"),
+    X("lateral","DB lateral raise",4,12,20,"db"),
+    X("ohext","Overhead cable triceps extension",3,10,12,"mach"),
   ]},
   {name:"Pull", title:"Pull day", sub:"Row", noHS:true, ex:[
     X("row","Barbell row",5,5,5,"bar",{tip:WARM}),
     X("pullup","Pull ups",3,5,8,"bw",{load:true}),
-    X("pulldown","Lat pulldown",3,10,12,"mach"),
     X("facepull","Face pull",3,12,15,"mach"),
     X("curl","EZ bar curl",3,10,12,"mach"),
+    X("hlr","Hanging leg raise",3,10,15,"bw",{tip:"Top of range: straighter legs, slower lowering."}),
   ]},
   {name:"Legs", title:"Leg day", sub:"Squat", noHS:true, ex:[
     X("squat","Back squat",5,5,5,"bar",{tip:WARM}),
     X("rdl","Romanian deadlift (from the rack)",3,6,8,"bar",{tip:"Unrack it, hips back, slight knee bend, bar close to your legs."}),
     X("legpress","Leg press",3,10,12,"mach"),
     X("legcurl","Seated leg curl",3,10,12,"mach"),
-    X("calf","Standing calf raise",3,12,15,"mach"),
+    X("calf","Standing calf raise",4,10,15,"mach",{tip:"Pause 2 seconds at the bottom stretch on every rep."}),
   ]},
 ];
 // Gym dumbbells jump 5 lb at a time
@@ -229,7 +229,8 @@ function sessionFrom(dr){
   const d=DAYS[dr.day], src=(dr.byDay&&dr.byDay[dr.day])||{}, entries={}; let any=false;
   if(!d.noHS && src.handstand) entries.handstand=src.handstand;
   d.ex.forEach(ex=>{ const e=src[ex.id]; if(e&&e.reps&&e.reps.some(r=>r!=null)){
-    entries[ex.id]={w:e.w||0,reps:e.reps.map(r=>r==null?0:r)}; if(ex.unit==="sec") entries[ex.id].t=e.t; any=true; } });
+    entries[ex.id]={w:e.w||0,reps:e.reps.map(r=>r==null?0:r)}; if(ex.unit==="sec") entries[ex.id].t=e.t;
+    if(e.mode) entries[ex.id].mode=e.mode; if(e.reset) entries[ex.id].reset=true; any=true; } });
   return any ? {id:dr.id,date:dr.date,day:dr.day,ts:new Date(dr.date+"T20:00").getTime(),entries,easy:easyWeek(dr.date)||undefined} : null;
 }
 function saveDraft(){ LS.set("krish.draft", draft); }
@@ -241,37 +242,69 @@ function lastFor(exId, nBack=1){
 function lastStage(){ for(const s of sessions){ const h=s.entries&&s.entries.handstand; if(h&&h.stage) return Math.min(h.stage, HS_STAGES.length); } return 1; }
 
 function holdTarget(ex){ const [last]=lastFor(ex.id,1); return last ? (last.t||ex.hi) : ex.lo; }
+// History for one lift, newest first, with the session date (easy weeks skipped).
+function histFor(exId, n=60){
+  const out=[]; for(const s of sessions){ if(s.easy) continue; const e=s.entries&&s.entries[exId];
+    if(e && e.reps && e.reps.some(r=>r>0)){ out.push({e, date:s.date}); if(out.length>=n) break; } }
+  return out;
+}
+const isMain = ex => ex.kind==="bar" && ex.sets===5 && ex.lo===5 && ex.hi===5;
+const setsFor = (ex, mode) => mode==="3x5" ? 3 : ex.sets;
+const daysSince = d => Math.round((new Date(todayStr()+"T12:00") - new Date(d+"T12:00"))/864e5);
+const roundTo = (w, st) => Math.max(0, Math.floor(w/st)*st);
+function wLabel(ex, w){ return ex.kind==="bw" ? (w? "+"+fmtW(w)+" lb" : "bodyweight") : fmtW(w)+" lb"; }
+
 function advice(ex){
-  const [last] = lastFor(ex.id,1);
+  const H = histFor(ex.id), last = H[0] && H[0].e, prev = H[1] && H[1].e;
+  const st = STEP[ex.kind]||5;
   if(ex.unit==="sec"){
     if(!last) return {t:ex.lo, cls:"same", text:"First time. Hold "+ex.lo+"s on each set."};
     const t=holdTarget(ex), hit=last.reps.length>=ex.sets && last.reps.slice(0,ex.sets).every(r=>r>=t);
     if(hit) return {t:t+ex.tstep, cls:"up", text:"Held "+t+"s on every set. New target: "+(t+ex.tstep)+"s."};
     return {t, cls:"same", text:"Same target. Hold "+t+"s on every set to move up."};
   }
-  if(last && easyWeek()) return {w:last.w||0, t:last.t, cls:"same", text:"Easy week. Same weight as last time, 2 sets, stop 3 reps short. This one doesn't count toward progress."};
-  if(!last && ex.load && ex.lo<=6) return {w:0, cls:"same", text:"First time. Add backpack weight you could do about 6 reps with."};
-  if(!last && ex.kind==="bar" && ex.lo===5) return {w:45, cls:"same", text:"First time. Use a weight you could lift 8 to 10 times, then do sets of 5. It climbs fast from here."};
-  if(!last) return {w: ex.kind==="bw"?0:(ex.kind==="db"?15:ex.kind==="bar"?45:40), cls:"same", text:"First time. Pick a weight you could do for the middle of the range."};
-  const hit = last.reps.length>=ex.sets && last.reps.slice(0,ex.sets).every(r=>r>=ex.hi);
-  let w = last.w||0;
+  // First time
+  if(!last && ex.load && ex.lo<=6) return {w:0, cls:"same", text:"First time. Bodyweight only. Once every set hits "+ex.hi+", the app adds weight."};
+  if(!last && isMain(ex)) return {w:45, cls:"same", text:"First time. Use a weight you could lift 8 to 10 times, then do sets of 5. It climbs fast from here."};
+  if(!last) return {w: ex.kind==="bw"?0:(ex.kind==="db"?15:ex.kind==="bar"?45:40), cls:"same", text:"First time. Pick a weight you could do for the middle of the range, stopping 1 or 2 reps short."};
+
+  const mode = last.mode, w = last.w||0, sets = setsFor(ex, mode);
+  // Easy week: repeat, doesn't count
+  if(easyWeek()) return {w, mode, cls:"same", text:"Easy week. Same weight as last time, 2 sets, stop 3 reps short. This one doesn't count toward progress."};
+  // Coming back from a break
+  const gap = daysSince(H[0].date);
+  if(gap>=14 && w>0){ const nw = roundTo(w*(gap>=28?0.85:0.9), st);
+    return {w:nw, mode, cls:"stall", text:"It's been "+gap+" days. Start at "+wLabel(ex,nw)+" and build back up."}; }
+
+  const reps = last.reps.slice(0,sets), total = reps.reduce((a,r)=>a+(r||0),0);
+  const hit = last.reps.length>=sets && reps.every(r=>r>=ex.hi);
   if(hit){
-    if(ex.kind==="bw"){
-      if(ex.load) return {w:w+STEP.bw, cls:"up", text:"Hit the top last time. Go to +"+fmtW(w+STEP.bw)+" lb in the backpack."};
-      return {w, cls:"up", text: ex.tip||"Hit it. Make it harder."};
+    if(ex.kind==="bw" && !ex.load) return {w, mode, cls:"up", text: ex.tip||"Hit it. Make it harder."};
+    const nw = w + st;
+    if(ex.kind==="db" && nw>DB_MAX) return {w, mode, cls:"up", text:"Maxed the dumbbells. Add reps or slow the lowering."};
+    return {w:nw, mode, cls:"up", text:"Hit the top last time. Go up to "+wLabel(ex,nw)+"."};
+  }
+  // Accessory: too big a jump (reps fell 2+ below the range right after adding weight)
+  if(!isMain(ex) && prev && w>(prev.w||0) && reps.some(r=>r < ex.lo-1))
+    return {w:prev.w||0, mode, cls:"stall", text:"That jump was too big. Back to "+wLabel(ex,prev.w||0)+" and build reps first."};
+
+  // Stall check: 3 sessions at the same weight, or 2 hard misses (under 80% of target reps) on a main lift
+  const same = H.slice(0,3).filter(h=>(h.e.w||0)===w && (h.e.mode||"")===(mode||"")).length;
+  const hardMiss = isMain(ex) && prev && (prev.w||0)===w && (prev.mode||"")===(mode||"") &&
+    [last,prev].every(h=>h.reps.slice(0,sets).reduce((a,r)=>a+(r||0),0) < 0.8*sets*ex.hi);
+  if(same>=3 || hardMiss){
+    const why = hardMiss && same<3 ? "Two rough sessions in a row." : "Stuck 3 sessions.";
+    if(w<=0) return {w, mode, cls:"stall", text:why+" Use an easier version for a week, then come back."};
+    if(isMain(ex)){
+      if(mode==="3x5") return {w, mode, cls:"stall", text:why+" This lift has finished simple session to session progress. Keep "+wLabel(ex,w)+" for 3×5 and ask Claude to switch it to weekly progression."};
+      const resetsBefore = H.filter(h=>h.e.reset && !h.e.mode).length;
+      if(resetsBefore>=1){ const nw = roundTo(w*0.95, st);
+        return {w:nw, mode:"3x5", reset:true, cls:"stall", text:why+" Second stall, so this lift switches to 3 sets of 5 at "+wLabel(ex,nw)+"."}; }
     }
-    let nw = w + STEP[ex.kind];
-    if(ex.kind==="db" && nw>DB_MAX) return {w, cls:"up", text:"Maxed the dumbbells. Add reps or slow the lowering."};
-    return {w:nw, cls:"up", text:"Hit the top last time. Go up to "+fmtW(nw)+" lb."};
+    let nw = Math.round(w*0.9/st)*st; if(nw>=w) nw=Math.max(0,w-st);
+    return {w:nw, mode, reset:true, cls:"stall", text:why+" Drop to "+wLabel(ex,nw)+" and build back up."};
   }
-  const hist = lastFor(ex.id,3);
-  if(hist.length===3 && hist.every(h=>(h.w||0)===w)){
-    // Stuck 3 sessions: drop about 10% and build back up
-    if(w>0){ const st=STEP[ex.kind]; let nw=Math.round(w*0.9/st)*st; if(nw>=w) nw=Math.max(0,w-st);
-      return {w:nw, cls:"stall", text:"Stuck 3 sessions. Drop to "+(ex.kind==="bw"?(nw?"+"+fmtW(nw):"bodyweight"):fmtW(nw)+" lb")+" and build back up."}; }
-    return {w, cls:"stall", text:"Stuck 3 sessions. Use an easier version for a week, then come back."};
-  }
-  return {w, cls:"same", text:"Same weight. Beat last time's reps."};
+  return {w, mode, cls:"same", text:"Same weight. Beat last time's reps."};
 }
 
 function renderDays(){
@@ -322,14 +355,16 @@ function exCard(ex){
   const [last] = lastFor(ex.id,1);
   const timed = ex.unit==="sec";
   let e = E()[ex.id];
-  if(!e || !Array.isArray(e.reps) || e.reps.length!==ex.sets){ e = E()[ex.id] = {w:adv.w||0, t:adv.t, reps:Array(ex.sets).fill(null)}; }
+  const nSets = setsFor(ex, adv.mode);
+  if(!e || !Array.isArray(e.reps) || e.reps.length!==nSets){ e = E()[ex.id] = {w:adv.w||0, t:adv.t, reps:Array(nSets).fill(null)}; }
+  e.mode = adv.mode; e.reset = adv.reset;
   if(timed && !e.t) e.t = adv.t;
   const goal = ()=> timed ? e.t : ex.hi;
   const c = document.createElement("section"); c.className="card";
   const u = ex.unit==="sec"?"s":"";
   const lastTxt = last ? `Last: <b>${ex.kind==="bw"&&!last.w? "BW" : fmtW(last.w)+" lb"} × ${last.reps.map(r=>r==null?"–":r+u).join(", ")}</b>` : "No history yet";
   const wLabel = ex.kind==="db"?"lb / hand":ex.kind==="bw"?"added lb":"lb";
-  c.innerHTML = `<div><p class="ex-name">${ex.name}</p><div class="target">${timed? ex.sets+" × target time" : ex.sets+" × "+(ex.lo===ex.hi?ex.lo:ex.lo+"–"+ex.hi)}${ex.side?" /side":""}</div></div>
+  c.innerHTML = `<div><p class="ex-name">${ex.name}</p><div class="target">${timed? ex.sets+" × target time" : nSets+" × "+(ex.lo===ex.hi?ex.lo:ex.lo+"–"+ex.hi)}${ex.side?" /side":""}</div></div>
     <div class="last">${lastTxt}</div>
     <div class="tip ${adv.cls}">${adv.text}</div>
     ${timed?`<div class="weight"><span class="lbl">target</span>
@@ -407,7 +442,7 @@ function renderHist(){
   const h=$("hist");
   if(!sessions.length){ h.innerHTML=`<div class="empty">No workouts logged yet. Finish one and it shows up here.</div>`; return; }
   // Retired exercises stay readable in history
-  const names={bentrow:{name:"Bent over DB row",kind:"db"},reardelt:{name:"Rear delt fly",kind:"db"},plank:{name:"Plank",kind:"bw",unit:"sec"},legpress:{name:"Leg press",kind:"mach"}};
+  const names={bentrow:{name:"Bent over DB row",kind:"db"},reardelt:{name:"Rear delt fly",kind:"db"},plank:{name:"Plank",kind:"bw",unit:"sec"},legpress:{name:"Leg press",kind:"mach"},pulldown:{name:"Lat pulldown",kind:"mach"},pushdown:{name:"Triceps pushdown",kind:"mach"}};
   DAYS.forEach(d=>d.ex.forEach(x=>names[x.id]=x));
   h.innerHTML = sessions.slice(0,60).map(s=>{
     const rows = Object.entries(s.entries||{}).map(([k,e])=>{
