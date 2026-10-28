@@ -116,7 +116,7 @@ label.btn{display:inline-flex;align-items:center;justify-content:center}
     <div class="row between">
       <div>
         <div class="date" id="dateLbl"></div>
-        <h1 id="dayTitle">Workout A</h1>
+        <h1 id="dayTitle">Push day</h1>
       </div>
       <div class="tabs" role="tablist">
         <button id="tabLog" aria-pressed="true">Log</button>
@@ -132,7 +132,7 @@ label.btn{display:inline-flex;align-items:center;justify-content:center}
       <p class="note">Skip legs and do <span id="skipTo">Day 1</span> instead. Your upper body order stays the same, and legs come back after your next Day 4.</p>
       <button class="btn ghost" id="skipBtn">Skip legs today</button>
     </section>
-    <p class="rule" id="rule">Get all 5 reps on every set → the app adds 5 lb next time. Miss a rep → same weight again.</p>
+    <p class="rule" id="rule">Hit the top of the range on every set (all 5s on the 5×5) → the app adds weight next time. Miss it → same weight again.</p>
     <div class="list" id="list"></div>
     <p class="note" id="storeNote"></p>
   </main>
@@ -169,25 +169,28 @@ const HS_STAGES = [
 // kind: db = dumbbell (+2.5/hand), bar = barbell (+5), mach = machine (+5), bw = bodyweight (add reps, then backpack/variation)
 // load: true = weight goes in a backpack or dip belt. tstep = seconds added to a hold when the target is hit.
 const X = (id,name,sets,lo,hi,kind,opt={}) => ({id,name,sets,lo,hi,kind,unit:opt.unit||"reps",side:!!opt.side,tip:opt.tip||"",load:!!opt.load,tstep:opt.tstep||5});
+const WARM = "Warm up with the empty bar and 2 lighter sets first. Rest 3 to 5 min between work sets.";
 const DAYS = [
-  {name:"A", title:"Workout A", sub:"Bench", noHS:true, ex:[
-    X("squat","Back squat",5,5,5,"bar",{tip:"Warm up with the empty bar and 2 lighter sets first. Rest 3 to 5 min between work sets."}),
-    X("bench","Bench press",5,5,5,"bar"),
-    X("row","Barbell row",5,5,5,"bar"),
-    X("chinup","Chin ups",3,5,10,"bw",{load:true}),
-  ]},
-  {name:"B", title:"Workout B", sub:"Press", noHS:true, ex:[
-    X("squat","Back squat",5,5,5,"bar",{tip:"Warm up with the empty bar and 2 lighter sets first. Rest 3 to 5 min between work sets."}),
-    X("ohp","Overhead press",5,5,5,"bar"),
-    X("rdl","Romanian deadlift (from the rack)",3,8,8,"bar",{tip:"Unrack it, hips back, slight knee bend, bar close to your legs."}),
-    X("dips","Dips",3,6,10,"bw",{load:true}),
-  ]},
-  {name:"Bonus", title:"Bonus day", sub:"Size", noHS:true, ex:[
-    X("incline","Incline DB press",3,8,12,"db",{tip:"Optional 4th day. It never changes your A/B order."}),
-    X("pulldown","Lat pulldown",3,10,12,"mach"),
+  {name:"Push", title:"Push day", sub:"Bench", noHS:true, ex:[
+    X("bench","Bench press",5,5,5,"bar",{tip:WARM}),
+    X("ohp","Overhead press",3,6,8,"bar"),
+    X("incline","Incline DB press",3,8,12,"db"),
     X("lateral","DB lateral raise",3,12,15,"db"),
-    X("curl","EZ bar curl",3,10,12,"mach"),
     X("pushdown","Triceps pushdown",3,10,12,"mach"),
+  ]},
+  {name:"Pull", title:"Pull day", sub:"Row", noHS:true, ex:[
+    X("row","Barbell row",5,5,5,"bar",{tip:WARM}),
+    X("pullup","Pull ups",3,5,8,"bw",{load:true}),
+    X("pulldown","Lat pulldown",3,10,12,"mach"),
+    X("facepull","Face pull",3,12,15,"mach"),
+    X("curl","EZ bar curl",3,10,12,"mach"),
+  ]},
+  {name:"Legs", title:"Leg day", sub:"Squat", noHS:true, ex:[
+    X("squat","Back squat",5,5,5,"bar",{tip:WARM}),
+    X("rdl","Romanian deadlift (from the rack)",3,6,8,"bar",{tip:"Unrack it, hips back, slight knee bend, bar close to your legs."}),
+    X("legpress","Leg press",3,10,12,"mach"),
+    X("legcurl","Seated leg curl",3,10,12,"mach"),
+    X("calf","Standing calf raise",3,12,15,"mach"),
   ]},
 ];
 const STEP = {db:2.5, bar:5, mach:5, bw:5};
@@ -204,8 +207,8 @@ let draft = LS.get("krish.draft", null);
 let confirmDel = null;
 
 // Upper body days (1-4) keep their own order; legs never shift it.
-// A and B alternate; the bonus day never shifts the order.
-function upperNext(){ const u = sessions.find(s=>s.day<2); return u ? (u.day+1)%2 : 0; }
+// Push, pull, legs in a loop, however many days a week he trains.
+function upperNext(){ return sessions.length ? (sessions[0].day+1)%3 : 0; }
 function nextDay(){ return upperNext(); }
 function sortSessions(){ sessions.sort((a,b)=> (b.ts||0)-(a.ts||0)); }
 
@@ -275,7 +278,7 @@ function renderDays(){
   $("days").querySelectorAll("button").forEach(b=>b.onclick=()=>{ draft.day=+b.dataset.day; saveDraft(); render(); });
 }
 
-const RULE_TEXT = "Get all 5 reps on every set → the app adds 5 lb next time. Miss a rep → same weight again.";
+const RULE_TEXT = "Hit the top of the range on every set (all 5s on the 5×5) → the app adds weight next time. Miss it → same weight again.";
 function easyWeek(){
   if(!sessions.length) return false;
   const first = sessions.reduce((a,s)=> s.date<a ? s.date : a, sessions[0].date);
