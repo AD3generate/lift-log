@@ -1,7 +1,7 @@
 {
   "name": "Lift Log",
   "short_name": "Lift Log",
-  "description": "Five day workout logger that tells you when to go up in weight.",
+  "description": "Four day workout logger that tells you when to go up in weight.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

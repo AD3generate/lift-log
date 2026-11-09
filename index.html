@@ -39,7 +39,7 @@ h1{font-family:var(--display);font-weight:800;font-size:40px;line-height:1;margi
 .tabs{display:flex;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:3px}
 .tabs button{border:0;background:none;color:var(--muted);font:600 13px var(--body);padding:6px 12px;border-radius:999px;cursor:pointer}
 .tabs button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
-.days{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.days{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .days button{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:6px 2px;cursor:pointer;font:600 12px var(--body);display:grid;gap:0}
 .days button b{font-family:var(--display);font-size:20px;line-height:1}
 .days button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
@@ -113,7 +113,7 @@ label.btn{display:inline-flex;align-items:center;justify-content:center}
     <div class="row between">
       <div>
         <div class="date" id="dateLbl"></div>
-        <h1 id="dayTitle">Day 1 · Push</h1>
+        <h1 id="dayTitle">Day 1 · Pull</h1>
       </div>
       <div class="tabs" role="tablist">
         <button id="tabLog" aria-pressed="true">Log</button>
@@ -124,11 +124,6 @@ label.btn{display:inline-flex;align-items:center;justify-content:center}
   </header>
 
   <main id="logView">
-    <section class="card skip" id="skipBox" hidden>
-      <p class="ex-name">Can't get to the gym?</p>
-      <p class="note">Skip legs and do <span id="skipTo">Day 1</span> instead. Your upper body order stays the same, and legs come back after your next Day 4.</p>
-      <button class="btn ghost" id="skipBtn">Skip legs today</button>
-    </section>
     <p class="rule" id="rule">Hit the top of the range on every set → the app bumps the weight next time. Miss it → same weight again.</p>
     <div class="list" id="list"></div>
     <p class="note" id="storeNote"></p>
@@ -166,7 +161,50 @@ const HS_STAGES = [
 // kind: db = dumbbell (+2.5/hand), bar = barbell (+5), mach = machine (+5), bw = bodyweight (add reps, then backpack/variation)
 // load: true = weight goes in a backpack or dip belt. tstep = seconds added to a hold when the target is hit.
 const X = (id,name,sets,lo,hi,kind,opt={}) => ({id,name,sets,lo,hi,kind,unit:opt.unit||"reps",side:!!opt.side,tip:opt.tip||"",load:!!opt.load,tstep:opt.tstep||5});
+// Program 2: 4 day full body (Mon / Tue / Thu / Fri). Heavy and volume days for pull ups and dips.
+const PROG = 2;
+const WALL = () => X("wallhs","Handstand wall holds",3,30,60,"bw",{unit:"sec",tstep:5,tip:"Chest to wall. Push tall, arms straight and working."});
+const LSIT = () => X("lsit","L sit hold (dip bars)",3,10,20,"bw",{unit:"sec",tstep:2,tip:"Can't hold 10s straight? Tuck your knees."});
+const SEATED = () => X("legraise","Seated L sit raises",3,10,15,"bw",{tip:"Top of range: straighter legs, hold 1s at the top."});
 const DAYS = [
+  {name:"Pull · heavy", ex:[
+    WALL(),
+    LSIT(),
+    X("wpullup","Weighted pull ups",4,3,5,"bw",{load:true}),
+    X("sarow","Single arm DB row",3,8,12,"db",{side:true}),
+    X("dbcurl","DB curls",3,8,12,"db"),
+    X("abwheel","Ab wheel rollouts (kneeling)",3,8,12,"bw",{tip:"Top of range: roll out farther and lower slower."}),
+  ]},
+  {name:"Push · heavy", ex:[
+    WALL(),
+    X("wdips","Weighted dips",4,3,5,"bw",{load:true}),
+    X("incdb","Incline DB bench press",3,8,12,"db"),
+    X("squat","Barbell squat",3,3,5,"bar",{tip:"Ramp up 2 or 3 sets first. They don't count."}),
+    X("lateral","DB lateral raise",3,12,15,"db"),
+    SEATED(),
+    X("sideplank","Side plank",2,30,45,"bw",{unit:"sec",tstep:5,side:true}),
+  ]},
+  {name:"Pull · volume", ex:[
+    WALL(),
+    LSIT(),
+    X("pullup","Weighted pull ups (volume)",4,6,8,"bw",{load:true}),
+    X("rdl","Romanian deadlift",3,6,8,"bar",{tip:"Hips back, slight knee bend, bar close to your legs."}),
+    X("sarow","Single arm DB row",3,8,12,"db",{side:true}),
+    X("dbcurl","DB curls",3,8,12,"db"),
+    X("hollow","Hollow body hold",3,30,45,"bw",{unit:"sec",tstep:5}),
+  ]},
+  {name:"Push · volume", ex:[
+    WALL(),
+    X("dips","Weighted dips (volume)",4,6,8,"bw",{load:true}),
+    X("feps","Feet elevated push ups",3,8,12,"bw",{load:true}),
+    X("bss","Bulgarian split squat",2,8,10,"db",{side:true}),
+    X("lateral","DB lateral raise",3,12,15,"db"),
+    X("facepull","Face pulls",2,12,15,"mach"),
+    SEATED(),
+  ]},
+];
+// Previous 5 day program. Kept so older history and backups still read correctly.
+const OLD_DAYS = [
   {name:"Push · heavy", ex:[
     X("wdips","Weighted dips",3,4,6,"bw",{load:true,tip:"Stop each set 1 or 2 reps short."}),
     X("pike","Pike push ups (feet elevated)",3,5,10,"bw",{tip:"Top of range: raise your feet higher."}),
@@ -216,17 +254,16 @@ let store = null;                              // {col} when db is available
 let draft = LS.get("lift.draft", null);
 let confirmDel = null;
 
-// Upper body days (1-4) keep their own order; legs never shift it.
-function upperNext(){ const u = sessions.find(s=>s.day<4); return u ? (u.day+1)%4 : 0; }
-function legsDue(){ const i = sessions.findIndex(s=>s.day<4); if(i<0 || sessions[i].day!==3) return false;
-  return !sessions.slice(0,i).some(s=>s.day===4); }
-function nextDay(){ return legsDue() ? 4 : upperNext(); }
+// Straight 4 day rotation. Workouts from the old program don't move it.
+function nextDay(){ const s = sessions.find(x=>x.prog===PROG); return s ? (s.day+1)%DAYS.length : 0; }
+function progOf(s){ return s && s.prog===PROG ? DAYS : OLD_DAYS; }
+function dayName(s){ const d = progOf(s)[s.day]; return d ? d.name : "Workout"; }
 function sortSessions(){ sessions.sort((a,b)=> (b.ts||0)-(a.ts||0)); }
 
-function newDraft(){ return {id:"s"+Date.now().toString(36)+Math.random().toString(36).slice(2,6), date:todayStr(), day:nextDay(), byDay:{}}; }
+function newDraft(){ return {id:"s"+Date.now().toString(36)+Math.random().toString(36).slice(2,6), date:todayStr(), day:nextDay(), byDay:{}, prog:PROG}; }
 function ensureDraft(){
   if(draft && !draft.byDay){ draft.byDay = {}; draft.byDay[draft.day] = draft.entries||{}; delete draft.entries; }
-  if(draft && draft.date!==todayStr()){
+  if(draft && (draft.date!==todayStr() || draft.prog!==PROG)){
     // Workout left open from an earlier day: keep it if anything was logged, then start fresh
     const sess = sessionFrom(draft);
     if(sess){ sessions = sessions.filter(x=>x.id!==sess.id); sessions.push(sess); sortSessions(); LS.set("lift.sessions",sessions); }
@@ -236,11 +273,12 @@ function ensureDraft(){
 }
 function E(){ return draft.byDay[draft.day] || (draft.byDay[draft.day] = {}); }
 function sessionFrom(dr){
-  const d=DAYS[dr.day], src=(dr.byDay&&dr.byDay[dr.day])||{}, entries={}; let any=false;
+  const d=progOf(dr)[dr.day], src=(dr.byDay&&dr.byDay[dr.day])||{}, entries={}; let any=false;
+  if(!d) return null;
   if(!d.noHS && src.handstand) entries.handstand=src.handstand;
   d.ex.forEach(ex=>{ const e=src[ex.id]; if(e&&e.reps&&e.reps.some(r=>r!=null)){
     entries[ex.id]={w:e.w||0,reps:e.reps.map(r=>r==null?0:r)}; if(ex.unit==="sec") entries[ex.id].t=e.t; any=true; } });
-  return any ? {id:dr.id,date:dr.date,day:dr.day,ts:new Date(dr.date+"T20:00").getTime(),entries,easy:easyWeek(dr.date)||undefined} : null;
+  return any ? {id:dr.id,date:dr.date,day:dr.day,ts:Math.min(new Date(dr.date+"T20:00").getTime(),Date.now()),entries,easy:easyWeek(dr.date)||undefined,prog:dr.prog===PROG?PROG:undefined} : null;
 }
 function saveDraft(){ LS.set("lift.draft", draft); }
 
@@ -306,8 +344,6 @@ function render(){
   renderDays();
   const list = $("list"); list.innerHTML="";
   if(!d.noHS) list.appendChild(handstandCard());
-  $("skipBox").hidden = draft.day!==4;
-  $("skipTo").textContent = "Day "+(upperNext()+1)+" · "+DAYS[upperNext()].name;
   d.ex.forEach(ex=>list.appendChild(exCard(ex)));
   updateProgress();
 }
@@ -315,7 +351,7 @@ function render(){
 function handstandCard(){
   const e = E().handstand || (E().handstand = {stage:lastStage(), done:false});
   const c = document.createElement("section"); c.className="card"+(e.done?" done":"");
-  c.innerHTML = `<div><p class="ex-name">Handstand block</p><div class="target">~12 min · your stage</div></div>
+  c.innerHTML = `<div><p class="ex-name">Handstand block</p><div class="target">~10 min · your stage</div></div>
     <div class="stages">${HS_STAGES.map((_,i)=>`<button data-s="${i+1}" aria-pressed="${e.stage===i+1}" aria-label="Stage ${i+1}">${i+1}</button>`).join("")}</div>
     <div class="stage-desc" id="hsDesc">${HS_STAGES[e.stage-1]}</div>
     <div class="note">Stop when attempts get sloppy. Move up a stage after hitting it in two separate sessions.</div>
@@ -376,12 +412,11 @@ function updateProgress(){
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2200); }
 
 let finishArmed=false;
-$("skipBtn").onclick = ()=>{ draft.day = upperNext(); saveDraft(); render(); window.scrollTo({top:0}); toast("Legs skipped. Day "+(draft.day+1)+" it is."); };
 $("finish").onclick = async ()=>{
   const built = sessionFrom(draft), any = !!built;
   if(!any && !finishArmed){ finishArmed=true; $("finish").textContent="Nothing logged. Tap again to skip"; setTimeout(()=>{finishArmed=false;$("finish").textContent="Finish workout"},3000); return; }
   finishArmed=false;
-  const sess = built || {id:draft.id,date:draft.date,day:draft.day,entries:{}}; sess.ts = Date.now();
+  const sess = built || {id:draft.id,date:draft.date,day:draft.day,entries:{},prog:PROG}; sess.ts = Date.now();
   sessions = sessions.filter(s=>s.id!==sess.id); sessions.unshift(sess); sortSessions(); LS.set("lift.sessions",sessions);
   if(store){ try{ await store.col.doc(sess.id).set(sess); }catch(err){ toast("Saved on this phone. Sync failed, will retry next save."); } }
   draft=null; LS.del("lift.draft"); ensureDraft(); render();
@@ -399,7 +434,7 @@ function renderCal(){
   for(let i=0;i<lead;i++) cells += `<div class="d blank"></div>`;
   for(let d=1; d<=days; d++){
     const ss = byDate[key(d)], today = isNow && d===now.getDate();
-    if(ss){ count++; cells += `<button class="d on${today?" today":""}" data-id="${ss[0].id}" aria-label="${first.toLocaleDateString(undefined,{month:"long"})} ${d}, ${ss.map(x=>DAYS[x.day].name).join(" and ")}">${d}<small>${ss.map(x=>DAYS[x.day].name.split(" · ")[0]).join("+")}</small></button>`; }
+    if(ss){ count++; cells += `<button class="d on${today?" today":""}" data-id="${ss[0].id}" aria-label="${first.toLocaleDateString(undefined,{month:"long"})} ${d}, ${ss.map(x=>dayName(x)).join(" and ")}">${d}<small>${ss.map(x=>dayName(x).split(" · ")[0]).join("+")}</small></button>`; }
     else cells += `<div class="d${today?" today":""}">${d}</div>`;
   }
   $("cal").innerHTML = `<div class="cal-head"><button class="cal-nav" id="calPrev" aria-label="Previous month">‹</button>
@@ -417,16 +452,17 @@ function renderHist(){
   if(!sessions.length){ h.innerHTML=`<div class="empty">No workouts logged yet. Finish one and it shows up here.</div>`; return; }
   // Retired exercises stay readable in history
   const names={bentrow:{name:"Bent over DB row",kind:"db"},reardelt:{name:"Rear delt fly",kind:"db"},plank:{name:"Plank",kind:"bw",unit:"sec"},legpress:{name:"Leg press",kind:"mach"}};
-  DAYS.forEach(d=>d.ex.forEach(x=>names[x.id]=x));
+  OLD_DAYS.forEach(d=>d.ex.forEach(x=>names[x.id]=x));
+  const newNames = Object.assign({}, names); DAYS.forEach(d=>d.ex.forEach(x=>newNames[x.id]=x));
   h.innerHTML = sessions.slice(0,60).map(s=>{
     const rows = Object.entries(s.entries||{}).map(([k,e])=>{
       if(k==="handstand") return `<tr><td>Handstand</td><td>stage ${e.stage}${e.done?" ✓":""}</td></tr>`;
-      const x=names[k]; if(!x) return "";
+      const x=(s.prog===PROG?newNames:names)[k]; if(!x) return "";
       const w = x.unit==="sec"?"":(x.kind==="bw"&&!e.w?"BW × ":fmtW(e.w)+" × ");
       return `<tr><td>${x.name}</td><td>${w}${e.reps.join(", ")}${x.unit==="sec"?"s":""}</td></tr>`;
     }).join("");
     const dt=new Date(s.date+"T12:00").toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
-    return `<section class="card" id="s-${s.id}"><div class="row between"><h3>Day ${s.day+1} · ${DAYS[s.day].name}</h3><span class="date">${dt}</span></div>
+    return `<section class="card" id="s-${s.id}"><div class="row between"><h3>Day ${s.day+1} · ${dayName(s)}</h3><span class="date">${dt}</span></div>
       <table>${rows}</table>
       <div><button class="del ${confirmDel===s.id?"confirm":""}" data-id="${s.id}">${confirmDel===s.id?"Tap again to delete":"Delete"}</button></div></section>`;
   }).join("");
