@@ -163,11 +163,9 @@ const HS_STAGES = [
 const X = (id,name,sets,lo,hi,kind,opt={}) => ({id,name,sets,lo,hi,kind,unit:opt.unit||"reps",side:!!opt.side,tip:opt.tip||"",load:!!opt.load,tstep:opt.tstep||5});
 // Program 2: 4 day full body (Mon / Tue / Thu / Fri). Heavy and volume days for pull ups and dips.
 const PROG = 2;
-const WALL = () => X("wallhs","Handstand wall holds",3,30,60,"bw",{unit:"sec",tstep:5,tip:"Chest to wall. Push tall, arms straight and working."});
 const SEATED = () => X("legraise","Seated L sit raises",3,10,15,"bw",{tip:"Top of range: straighter legs, hold 1s at the top."});
 const DAYS = [
   {name:"Pull · heavy", ex:[
-    WALL(),
     X("wpullup","Weighted pull ups",4,3,5,"bw",{load:true}),
     X("sarow","Single arm DB row",3,8,12,"db",{side:true}),
     X("reardelt","Rear delt fly",3,12,15,"db"),
@@ -175,7 +173,6 @@ const DAYS = [
     X("lyinglr","Lying leg raises",3,10,15,"bw",{tip:"Low back pressed into the floor. Lower slowly and stop before it arches."}),
   ]},
   {name:"Push · heavy", ex:[
-    WALL(),
     X("wdips","Weighted dips",4,3,5,"bw",{load:true}),
     X("incdb","Incline DB bench press",3,8,12,"db"),
     X("squat","Barbell squat",3,3,5,"bar",{tip:"Ramp up 2 or 3 sets first. They don't count."}),
@@ -183,7 +180,6 @@ const DAYS = [
     X("sideplank","Side plank",2,30,45,"bw",{unit:"sec",tstep:5,side:true}),
   ]},
   {name:"Pull · volume", ex:[
-    WALL(),
     X("pullup","Weighted pull ups (volume)",4,6,8,"bw",{load:true}),
     X("rdl","Romanian deadlift",3,6,8,"bar",{tip:"Hips back, slight knee bend, bar close to your legs."}),
     X("sarow","Single arm DB row",3,8,12,"db",{side:true}),
@@ -192,7 +188,6 @@ const DAYS = [
     X("hollow","Hollow body hold",3,30,45,"bw",{unit:"sec",tstep:5}),
   ]},
   {name:"Push · volume", ex:[
-    WALL(),
     X("dips","Weighted dips (volume)",4,6,8,"bw",{load:true}),
     X("feps","Feet elevated push ups",3,8,12,"bw",{load:true}),
     X("bss","Bulgarian split squat",2,8,10,"db",{side:true}),
@@ -349,7 +344,7 @@ function render(){
 function handstandCard(){
   const e = E().handstand || (E().handstand = {stage:lastStage(), done:false});
   const c = document.createElement("section"); c.className="card"+(e.done?" done":"");
-  c.innerHTML = `<div><p class="ex-name">Handstand block</p><div class="target">~10 min · your stage</div></div>
+  c.innerHTML = `<div><p class="ex-name">Handstand block</p><div class="target">~12 min · your stage</div></div>
     <div class="stages">${HS_STAGES.map((_,i)=>`<button data-s="${i+1}" aria-pressed="${e.stage===i+1}" aria-label="Stage ${i+1}">${i+1}</button>`).join("")}</div>
     <div class="stage-desc" id="hsDesc">${HS_STAGES[e.stage-1]}</div>
     <div class="note">Stop when attempts get sloppy. Move up a stage after hitting it in two separate sessions.</div>
@@ -449,7 +444,7 @@ function renderHist(){
   const h=$("hist");
   if(!sessions.length){ h.innerHTML=`<div class="empty">No workouts logged yet. Finish one and it shows up here.</div>`; return; }
   // Retired exercises stay readable in history
-  const names={bentrow:{name:"Bent over DB row",kind:"db"},reardelt:{name:"Rear delt fly",kind:"db"},plank:{name:"Plank",kind:"bw",unit:"sec"},legpress:{name:"Leg press",kind:"mach"},abwheel:{name:"Ab wheel rollouts (kneeling)",kind:"bw"},hlr:{name:"Hanging leg raises",kind:"bw"}};
+  const names={bentrow:{name:"Bent over DB row",kind:"db"},reardelt:{name:"Rear delt fly",kind:"db"},plank:{name:"Plank",kind:"bw",unit:"sec"},legpress:{name:"Leg press",kind:"mach"},abwheel:{name:"Ab wheel rollouts (kneeling)",kind:"bw"},hlr:{name:"Hanging leg raises",kind:"bw"},wallhs:{name:"Handstand wall holds",kind:"bw",unit:"sec"}};
   OLD_DAYS.forEach(d=>d.ex.forEach(x=>names[x.id]=x));
   const newNames = Object.assign({}, names); DAYS.forEach(d=>d.ex.forEach(x=>newNames[x.id]=x));
   h.innerHTML = sessions.slice(0,60).map(s=>{
