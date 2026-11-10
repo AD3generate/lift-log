@@ -180,10 +180,11 @@ const DAYS = [
   ]},
   {name:"Pull", title:"Pull day", sub:"Row", noHS:true, ex:[
     X("row","Barbell row",5,5,5,"bar",{tip:WARM}),
-    X("pullup","Pull ups",3,5,8,"bw",{load:true}),
+    X("pulldown","Lat pulldown",3,8,12,"mach",{tip:"Pull the bar to your upper chest, elbows down and back. No leaning back to swing it."}),
     X("facepull","Face pull",3,12,15,"mach"),
     X("curl","EZ bar curl",3,10,12,"mach"),
-    X("hlr","Hanging leg raise",3,10,15,"bw",{tip:"Top of range: straighter legs, slower lowering."}),
+    X("hang","Dead hang",3,20,45,"bw",{unit:"sec",tstep:5,tip:"Shoulders pulled down, no swinging."}),
+    X("ballraise","Leg raises on the ball",3,10,15,"bw",{tip:"Top of range: straighter legs, slower lowering."}),
   ]},
   {name:"Legs", title:"Leg day", sub:"Squat", noHS:true, ex:[
     X("squat","Back squat",5,5,5,"bar",{tip:WARM}),
@@ -442,7 +443,7 @@ function renderHist(){
   const h=$("hist");
   if(!sessions.length){ h.innerHTML=`<div class="empty">No workouts logged yet. Finish one and it shows up here.</div>`; return; }
   // Retired exercises stay readable in history
-  const names={bentrow:{name:"Bent over DB row",kind:"db"},reardelt:{name:"Rear delt fly",kind:"db"},plank:{name:"Plank",kind:"bw",unit:"sec"},legpress:{name:"Leg press",kind:"mach"},pulldown:{name:"Lat pulldown",kind:"mach"},pushdown:{name:"Triceps pushdown",kind:"mach"}};
+  const names={bentrow:{name:"Bent over DB row",kind:"db"},reardelt:{name:"Rear delt fly",kind:"db"},plank:{name:"Plank",kind:"bw",unit:"sec"},legpress:{name:"Leg press",kind:"mach"},pulldown:{name:"Lat pulldown",kind:"mach"},pullup:{name:"Pull ups",kind:"bw"},hlr:{name:"Hanging leg raise",kind:"bw"},pushdown:{name:"Triceps pushdown",kind:"mach"}};
   DAYS.forEach(d=>d.ex.forEach(x=>names[x.id]=x));
   h.innerHTML = sessions.slice(0,60).map(s=>{
     const rows = Object.entries(s.entries||{}).map(([k,e])=>{
